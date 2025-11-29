@@ -210,7 +210,7 @@ fn print(stats: BTreeMap<String, (i16, i64, usize, i16)>) {
 
 #[inline(never)]
 fn one(map: &[u8]) -> HashMap<StrVec, (i16, i64, usize, i16), FastHasherBuilder> {
-    let mut stats = HashMap::with_capacity_and_hasher(1_000, FastHasherBuilder);
+    let mut stats = HashMap::with_capacity_and_hasher(1_024, FastHasherBuilder);
     let mut at = 0;
     while at < map.len() {
         let newline_at = at + next_newline(map, at);
