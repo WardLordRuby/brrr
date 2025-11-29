@@ -15,7 +15,7 @@ fn main() {
     let f = File::open("measurements.txt").unwrap();
     let map = mmap(&f);
     // TODO: maybe make the key &[u8], but measure since we're breaking MADV_SEQUENTIAL
-    let mut stats = HashMap::<Vec<u8>, (i16, i64, usize, i16)>::new();
+    let mut stats = HashMap::<Vec<u8>, (i16, i64, usize, i16)>::with_capacity(10_000);
     let mut at = 0;
     loop {
         let line = next_line(map, &mut at);
