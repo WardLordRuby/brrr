@@ -5,7 +5,7 @@
 
 use std::{
     borrow::Borrow,
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, btree_map::Entry},
     ffi::{c_int, c_void},
     fs::File,
     hash::{BuildHasher, Hash, Hasher},
@@ -63,6 +63,9 @@ union StrVec {
     // otherwise, pointer is a pointer to Vec<u8>
     heap: (usize, *mut u8),
 }
+
+// SAFETY: effectively just a Vec<str>, which is fine across thread boundaries
+unsafe impl Send for StrVec {}
 
 impl StrVec {
     pub fn new(s: &[u8]) -> Self {
@@ -131,29 +134,47 @@ impl Borrow<[u8]> for StrVec {
 
 fn main() {
     let f = File::open("measurements.txt").unwrap();
-    let map = mmap(&f);
-    let mut stats = HashMap::<StrVec, (i16, i64, usize, i16), _>::with_capacity_and_hasher(
-        1_000,
-        FastHasherBuilder,
-    );
-    let mut at = 0;
-    while at < map.len() {
-        let newline_at = at + next_newline(map, at);
-        let line = &map[at..newline_at];
-        at = newline_at + 1;
-        let (station, temperature) = split_semi(line);
-        let t = parse_temperature(temperature);
-        let stats = match stats.get_mut(station) {
-            Some(stats) => stats,
-            None => stats
-                .entry(StrVec::new(station))
-                .or_insert((i16::MAX, 0, 0, i16::MIN)),
-        };
-        stats.0 = stats.0.min(t);
-        stats.1 += i64::from(t);
-        stats.2 += 1;
-        stats.3 = stats.3.max(t);
-    }
+    let mut stats = BTreeMap::new();
+    std::thread::scope(|scope| {
+        let map = mmap(&f);
+        let nthreads = std::thread::available_parallelism().unwrap();
+        let mut at = 0;
+        let (tx, rx) = std::sync::mpsc::sync_channel(nthreads.get());
+        let chunk_size = map.len() / nthreads;
+        for _ in 0..nthreads.get() {
+            let start = at;
+            let end = (at + chunk_size).min(map.len());
+            let end = if end == map.len() {
+                map.len()
+            } else {
+                let newline_at = next_newline(&map[end..], 0);
+                end + newline_at + 1
+            };
+            let map = &map[start..end];
+            at = end;
+            let tx = tx.clone();
+            scope.spawn(move || tx.send(one(map)));
+        }
+
+        drop(tx);
+        for one_stat in rx {
+            for (k, v) in one_stat {
+                // SAFETY: the README promised
+                match stats.entry(unsafe { String::from_utf8_unchecked(k.as_ref().to_vec()) }) {
+                    Entry::Vacant(none) => {
+                        none.insert(v);
+                    }
+                    Entry::Occupied(some) => {
+                        let stat = some.into_mut();
+                        stat.0 = stat.0.min(v.0);
+                        stat.1 += stat.1;
+                        stat.2 += stat.2;
+                        stat.3 = stat.3.max(v.3);
+                    }
+                }
+            }
+        }
+    });
     print!("{{");
     let stats = BTreeMap::from_iter(
         stats
@@ -174,6 +195,29 @@ fn main() {
         }
     }
     print!("}}");
+}
+
+fn one(map: &[u8]) -> HashMap<StrVec, (i16, i64, usize, i16), FastHasherBuilder> {
+    let mut stats = HashMap::with_capacity_and_hasher(1_000, FastHasherBuilder);
+    let mut at = 0;
+    while at < map.len() {
+        let newline_at = at + next_newline(map, at);
+        let line = &map[at..newline_at];
+        at = newline_at + 1;
+        let (station, temperature) = split_semi(line);
+        let t = parse_temperature(temperature);
+        let stats = match stats.get_mut(station) {
+            Some(stats) => stats,
+            None => stats
+                .entry(StrVec::new(station))
+                .or_insert((i16::MAX, 0, 0, i16::MIN)),
+        };
+        stats.0 = stats.0.min(t);
+        stats.1 += i64::from(t);
+        stats.2 += 1;
+        stats.3 = stats.3.max(t);
+    }
+    stats
 }
 
 fn next_newline(map: &[u8], at: usize) -> usize {
