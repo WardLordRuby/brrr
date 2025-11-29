@@ -45,13 +45,6 @@ impl Hasher for FastHasher {
             )
         };
         self.0 = word[0] ^ word[1];
-        // let (chunks, remainder) = bytes.as_chunks::<8>();
-        // let mut last = [1u8; 8];
-        // (last[..remainder.len()]).copy_from_slice(remainder);
-        // for &chunk in chunks.iter().chain(std::iter::once(&last)) {
-        //     let mixed = self.0 as u128 * (u64::from_ne_bytes(chunk) as u128);
-        //     self.0 = (mixed >> 64) as u64 ^ mixed as u64;
-        // }
     }
 }
 
