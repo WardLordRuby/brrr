@@ -10,3 +10,6 @@ debug = true
 
 [dependencies]
 libc = "0.2.177"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Security", "Win32_System_Memory"] }
