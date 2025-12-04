@@ -1,16 +1,14 @@
 #![feature(portable_simd)]
 #![feature(cold_path)]
-#![feature(slice_split_once)]
 #![feature(hasher_prefixfree_extras)]
-#![feature(ptr_cast_array)]
 
-use std::io::Write;
 use std::{
     borrow::Borrow,
     collections::{BTreeMap, HashMap, btree_map::Entry},
     ffi::{c_int, c_void},
     fs::File,
     hash::{BuildHasher, Hash, Hasher},
+    io::Write,
     os::fd::AsRawFd,
     simd::{cmp::SimdPartialEq, u8x64},
 };
@@ -204,12 +202,6 @@ fn print(stats: BTreeMap<String, Stat>) {
     let stdout = stdout.lock();
     let mut writer = std::io::BufWriter::new(stdout);
     write!(writer, "{{").unwrap();
-    let stats = BTreeMap::from_iter(
-        stats
-            .iter()
-            // SAFETY: the README promised
-            .map(|(k, v)| (unsafe { std::str::from_utf8_unchecked(k.as_ref()) }, *v)),
-    );
     let mut stats = stats.into_iter().peekable();
     while let Some((station, stat)) = stats.next() {
         write!(
