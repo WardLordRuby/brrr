@@ -51,14 +51,16 @@ impl Hasher for FastHasher {
     }
 }
 
-const INLINE: usize = 16;
+type AllocStrVec = (usize, *mut u8);
+
+const INLINE: usize = std::mem::size_of::<AllocStrVec>();
 const LAST: usize = INLINE - 1;
 
 union StrVec {
     inlined: [u8; INLINE],
     // if length high bit is set, then inlined into pointer then len
     // otherwise, pointer is a pointer to Vec<u8>
-    heap: (usize, *mut u8),
+    heap: AllocStrVec,
 }
 
 // SAFETY: effectively just a Vec<str>, which is fine across thread boundaries
