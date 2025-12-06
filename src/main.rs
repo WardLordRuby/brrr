@@ -59,8 +59,9 @@ union StrVec {
 struct AllocedStrVec {
     // if length high bit is set, then inlined into pointer then len
     // otherwise, pointer is a pointer to Vec<u8>
-    len: usize,
     ptr: *mut u8,
+    // len must be last for alignment with `inlined[LAST]` in the `StrVec` union
+    len: usize,
 }
 
 impl Drop for AllocedStrVec {
