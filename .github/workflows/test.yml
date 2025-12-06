@@ -42,17 +42,8 @@ jobs:
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # branch=master
         with:
           toolchain: nightly
-      - name: Install java
-        uses: actions/setup-java@f2beeb24e141e01a676f977032f5a29d81c9e27e # tag=v5.1.0
-        with:
-          distribution: 'graalvm'
-          java-version: '21'
-      - name: git clone 1brc
-        run: git clone https://github.com/gunnarmorling/1brc.git
-      - name: build 1brc
-        run: cd 1brc && ./mvnw clean verify
-      - name: create measurements
-        run: cd 1brc && ./create_measurements.sh 100000000 && mv measurements.txt ../
+      - name: extract measurements
+        run: xz -d measurements-100m.txt.xz && mv measurements-100m.txt measurements.txt
       - name: cargo run
         run: cargo run --locked --release > candidate.txt
       - name: diff candidate.txt correct-100m.txt
