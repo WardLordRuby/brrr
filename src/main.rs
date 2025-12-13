@@ -184,7 +184,7 @@ fn main() {
     let f = File::open("measurements.txt").unwrap();
     let mut stats = BTreeMap::new();
     std::thread::scope(|scope| {
-        let map = mmap(&f);
+        let map = Mmap::new(&f);
         let map = map.bytes;
         let nthreads = std::thread::available_parallelism().unwrap();
         let mut at = 0;
@@ -352,26 +352,28 @@ mod unix {
         pub(crate) bytes: &'a [u8],
     }
 
-    pub(crate) fn mmap<'a>(f: &'a File) -> Mmap<'a> {
-        let len = f.metadata().unwrap().len();
-        unsafe {
-            let ptr = libc::mmap(
-                std::ptr::null_mut(),
-                len as libc::size_t,
-                libc::PROT_READ,
-                libc::MAP_PRIVATE,
-                f.as_raw_fd(),
-                0,
-            );
+    impl<'a> Mmap<'a> {
+        pub(crate) fn new(f: &'a File) -> Self {
+            let len = f.metadata().unwrap().len();
+            unsafe {
+                let ptr = libc::mmap(
+                    std::ptr::null_mut(),
+                    len as libc::size_t,
+                    libc::PROT_READ,
+                    libc::MAP_PRIVATE,
+                    f.as_raw_fd(),
+                    0,
+                );
 
-            if ptr == libc::MAP_FAILED {
-                panic!("{:?}", std::io::Error::last_os_error());
-            } else {
-                if libc::madvise(ptr, len as libc::size_t, libc::MADV_SEQUENTIAL) != 0 {
-                    panic!("{:?}", std::io::Error::last_os_error())
-                }
-                Mmap {
-                    bytes: std::slice::from_raw_parts(ptr as *const u8, len as usize),
+                if ptr == libc::MAP_FAILED {
+                    panic!("{:?}", std::io::Error::last_os_error());
+                } else {
+                    if libc::madvise(ptr, len as libc::size_t, libc::MADV_SEQUENTIAL) != 0 {
+                        panic!("{:?}", std::io::Error::last_os_error())
+                    }
+                    Mmap {
+                        bytes: std::slice::from_raw_parts(ptr as *const u8, len as usize),
+                    }
                 }
             }
         }
@@ -405,33 +407,35 @@ mod win {
         }
     }
 
-    pub(crate) fn mmap<'a>(f: &'a File) -> Mmap<'a> {
-        let len = f.metadata().unwrap().len();
-        unsafe {
-            let mapping = CreateFileMappingW(
-                f.as_raw_handle(),
-                std::ptr::null_mut(),
-                PAGE_READONLY,
-                0,
-                0,
-                std::ptr::null(),
-            );
+    impl<'a> Mmap<'a> {
+        pub(crate) fn new(f: &'a File) -> Self {
+            let len = f.metadata().unwrap().len();
+            unsafe {
+                let mapping = CreateFileMappingW(
+                    f.as_raw_handle(),
+                    std::ptr::null_mut(),
+                    PAGE_READONLY,
+                    0,
+                    0,
+                    std::ptr::null(),
+                );
 
-            if mapping.is_null() {
-                panic!("{:?}", std::io::Error::last_os_error());
-            }
+                if mapping.is_null() {
+                    panic!("{:?}", std::io::Error::last_os_error());
+                }
 
-            let view = MapViewOfFile(mapping, FILE_MAP_READ, 0, 0, 0);
+                let view = MapViewOfFile(mapping, FILE_MAP_READ, 0, 0, 0);
 
-            if view.Value.is_null() {
-                CloseHandle(mapping);
-                panic!("{:?}", std::io::Error::last_os_error());
-            }
+                if view.Value.is_null() {
+                    CloseHandle(mapping);
+                    panic!("{:?}", std::io::Error::last_os_error());
+                }
 
-            Mmap {
-                mapping,
-                view,
-                bytes: std::slice::from_raw_parts(view.Value as *const u8, len as usize),
+                Mmap {
+                    mapping,
+                    view,
+                    bytes: std::slice::from_raw_parts(view.Value as *const u8, len as usize),
+                }
             }
         }
     }
